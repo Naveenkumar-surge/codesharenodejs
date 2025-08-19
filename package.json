@@ -13,9 +13,9 @@
     "@types/multer": "^2.0.0"
   },
   "scripts": {
-    "start": "node index.js",          
-    "dev": "nodemon index.js",         
-    "build": "echo 'No build step'"  
+    "start": "node server.js",          
+    "dev": "nodemon server.js",         
+    "build": "echo \"Skipping build step\""
   },
   "engines": {
     "node": "18.x"
