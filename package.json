@@ -11,5 +11,13 @@
   },
   "devDependencies": {
     "@types/multer": "^2.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",          
+    "dev": "nodemon index.js",         
+    "build": "echo 'No build step'"  
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
