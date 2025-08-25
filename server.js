@@ -13,18 +13,19 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // allow frontend
     methods: ["GET", "POST"],
   },
 });
 
-// 📂 File uploads setup
+// 📂 Setup file uploads
+const uploadPath = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath);
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, "uploads");
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath);
-    }
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -33,49 +34,63 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// 📝 Store last 5 messages per room
-const roomMessages = {}; // { roomId: [msg1, msg2, ...] }
-
 // Serve uploaded files
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(uploadPath));
+
+// 📝 Store messages + contentType per room
+// Example: roomMessages = { roomId: { messages: [], contentType: "text" } }
+const roomMessages = {};
 
 // 🔌 Socket.io
 io.on("connection", (socket) => {
-  console.log("New client connected:", socket.id);
+  console.log("✅ New client connected:", socket.id);
 
-  // Joining a room
+  // Join a room
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
-    console.log(`User ${socket.id} joined room ${roomId}`);
+    console.log(`📌 User ${socket.id} joined room ${roomId}`);
 
-    // ✅ Send last 5 messages if exist
-    if (roomMessages[roomId]) {
-      socket.emit("room-messages", roomMessages[roomId]);
+    // Ensure room initialized
+    if (!roomMessages[roomId]) {
+      roomMessages[roomId] = { messages: [], contentType: "text" };
     }
+
+    // Send last messages + current contentType
+    socket.emit("room-messages", roomMessages[roomId].messages);
+    socket.emit("room-contentType", roomMessages[roomId].contentType);
   });
 
-  // Receiving a new message
+  // Change content type (sync dropdown across room)
+  socket.on("room-contentType", ({ roomId, type }) => {
+    if (!roomMessages[roomId]) {
+      roomMessages[roomId] = { messages: [], contentType: type };
+    }
+    roomMessages[roomId].contentType = type;
+
+    io.to(roomId).emit("room-contentType", type);
+    console.log(`🔄 Room ${roomId} contentType changed to: ${type}`);
+  });
+
+  // Handle new message
   socket.on("room-message", (data) => {
     const { roomId } = data;
-
     if (!roomMessages[roomId]) {
-      roomMessages[roomId] = [];
+      roomMessages[roomId] = { messages: [], contentType: "text" };
     }
 
-    // Push new message
-    roomMessages[roomId].push(data);
+    roomMessages[roomId].messages.push(data);
 
-    // Keep only last 5
-    if (roomMessages[roomId].length > 5) {
-      roomMessages[roomId].shift();
+    // Keep only last 5 messages
+    if (roomMessages[roomId].messages.length > 5) {
+      roomMessages[roomId].messages.shift();
     }
 
-    // Broadcast new message to everyone
     io.to(roomId).emit("room-message", data);
+    console.log(`💬 New message in room ${roomId}`);
   });
 
   socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
+    console.log("❌ Client disconnected:", socket.id);
   });
 });
 
@@ -96,5 +111,5 @@ app.post("/upload", upload.single("file"), (req, res) => {
 // 🚀 Start server
 const PORT = 5000;
 server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
