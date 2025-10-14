@@ -24,13 +24,41 @@ server.timeout = 0;
 const uploadPath = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
 
+
 // Multer setup
+function autoCleanUploads(maxAgeHours = 24, minFreeGB = 1) {
+  try {
+    const stats = fs.statSync(uploadPath);
+    const files = fs.readdirSync(uploadPath);
+    const freeGB = os.freemem() / 1024 ** 3;
+
+    files.forEach((file) => {
+      const filePath = path.join(uploadPath, file);
+      const fileStats = fs.statSync(filePath);
+      const ageHours = (Date.now() - fileStats.mtimeMs) / 1000 / 3600;
+
+      // delete if older than 24h or free space < 1GB
+      if (ageHours > maxAgeHours || freeGB < minFreeGB) {
+        fs.unlinkSync(filePath);
+        console.log(`🧹 Deleted old file: ${file}`);
+      }
+    });
+  } catch (err) {
+    console.error("⚠️ Auto-clean error:", err.message);
+  }
+}
+// Clean every hour
+setInterval(autoCleanUploads, 60 * 60 * 1000);
+
+// 📦 Multer for normal uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadPath),
   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
 });
-const upload = multer({ storage });
-
+const upload = multer({
+  storage,
+  limits: { fileSize: 4 * 1024 * 1024 * 1024 } // 4 GB limit
+});
 // Serve files
 app.use("/uploads", express.static(uploadPath));
 
